@@ -602,6 +602,213 @@ std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH( ID3D11Device* d3dDevic
 
 //--------------------------------------------------------------------------------------
 _Use_decl_annotations_
+void __cdecl DirectX::Model::CreateEffectFromSDKMESHWithEffectInfo(const uint8_t* meshData, size_t dataSize, PVOID pEffInfoIn, IEffectFactory& fxFactory)
+{
+    if (!meshData || !dataSize || !pEffInfoIn)
+        throw std::exception("meshData, dataSize, pEffInfoIn cannot be null");
+
+    EffectFactory::EffectInfo *pInfoIn = reinterpret_cast<EffectFactory::EffectInfo*>(pEffInfoIn);
+
+    // File Headers
+    if (dataSize < sizeof(DXUT::SDKMESH_HEADER))
+        throw std::exception("End of file");
+    auto header = reinterpret_cast<const DXUT::SDKMESH_HEADER*>(meshData);
+
+    size_t headerSize = sizeof(DXUT::SDKMESH_HEADER)
+        + header->NumVertexBuffers * sizeof(DXUT::SDKMESH_VERTEX_BUFFER_HEADER)
+        + header->NumIndexBuffers * sizeof(DXUT::SDKMESH_INDEX_BUFFER_HEADER);
+    if (header->HeaderSize != headerSize)
+        throw std::exception("Not a valid SDKMESH file");
+
+    if (dataSize < header->HeaderSize)
+        throw std::exception("End of file");
+
+    if (header->Version != DXUT::SDKMESH_FILE_VERSION)
+        throw std::exception("Not a supported SDKMESH version");
+
+    if (header->IsBigEndian)
+        throw std::exception("Loading BigEndian SDKMESH files not supported");
+
+    if (!header->NumMeshes)
+        throw std::exception("No meshes found");
+
+    if (!header->NumVertexBuffers)
+        throw std::exception("No vertex buffers found");
+
+    if (!header->NumIndexBuffers)
+        throw std::exception("No index buffers found");
+
+    if (!header->NumTotalSubsets)
+        throw std::exception("No subsets found");
+
+    if (!header->NumMaterials)
+        throw std::exception("No materials found");
+
+    // Sub-headers
+    if (dataSize < header->VertexStreamHeadersOffset
+        || (dataSize < (header->VertexStreamHeadersOffset + header->NumVertexBuffers * sizeof(DXUT::SDKMESH_VERTEX_BUFFER_HEADER))))
+        throw std::exception("End of file");
+    auto vbArray = reinterpret_cast<const DXUT::SDKMESH_VERTEX_BUFFER_HEADER*>(meshData + header->VertexStreamHeadersOffset);
+
+    if (dataSize < header->IndexStreamHeadersOffset
+        || (dataSize < (header->IndexStreamHeadersOffset + header->NumIndexBuffers * sizeof(DXUT::SDKMESH_INDEX_BUFFER_HEADER))))
+        throw std::exception("End of file");
+    //auto ibArray = reinterpret_cast<const DXUT::SDKMESH_INDEX_BUFFER_HEADER*>(meshData + header->IndexStreamHeadersOffset);
+
+    if (dataSize < header->MeshDataOffset
+        || (dataSize < (header->MeshDataOffset + header->NumMeshes * sizeof(DXUT::SDKMESH_MESH))))
+        throw std::exception("End of file");
+    auto meshArray = reinterpret_cast<const DXUT::SDKMESH_MESH*>(meshData + header->MeshDataOffset);
+
+    if (dataSize < header->SubsetDataOffset
+        || (dataSize < (header->SubsetDataOffset + header->NumTotalSubsets * sizeof(DXUT::SDKMESH_SUBSET))))
+        throw std::exception("End of file");
+    auto subsetArray = reinterpret_cast<const DXUT::SDKMESH_SUBSET*>(meshData + header->SubsetDataOffset);
+
+    if (dataSize < header->FrameDataOffset
+        || (dataSize < (header->FrameDataOffset + header->NumFrames * sizeof(DXUT::SDKMESH_FRAME))))
+        throw std::exception("End of file");
+    // TODO - auto frameArray = reinterpret_cast<const DXUT::SDKMESH_FRAME*>( meshData + header->FrameDataOffset );
+
+    if (dataSize < header->MaterialDataOffset
+        || (dataSize < (header->MaterialDataOffset + header->NumMaterials * sizeof(DXUT::SDKMESH_MATERIAL))))
+        throw std::exception("End of file");
+    auto materialArray = reinterpret_cast<const DXUT::SDKMESH_MATERIAL*>(meshData + header->MaterialDataOffset);
+
+    // Buffer data
+    uint64_t bufferDataOffset = header->HeaderSize + header->NonBufferDataSize;
+    if ((dataSize < bufferDataOffset)
+        || (dataSize < bufferDataOffset + header->BufferDataSize))
+        throw std::exception("End of file");
+    //const uint8_t* bufferData = meshData + bufferDataOffset;
+
+    std::vector<std::shared_ptr<std::vector<D3D11_INPUT_ELEMENT_DESC>>> vbDecls;
+    vbDecls.resize(header->NumVertexBuffers);
+
+    std::vector<unsigned int> materialFlags;
+    materialFlags.resize(header->NumVertexBuffers);
+
+    for (UINT vbIdx = 0; vbIdx < header->NumVertexBuffers; ++vbIdx)
+    {
+        auto& vh = vbArray[vbIdx];
+
+        if (dataSize < vh.DataOffset
+            || (dataSize < vh.DataOffset + vh.SizeBytes))
+            throw std::exception("End of file");
+
+        vbDecls[vbIdx] = std::make_shared<std::vector<D3D11_INPUT_ELEMENT_DESC>>();
+        unsigned int flags = GetInputLayoutDesc(vh.Decl, *vbDecls[vbIdx].get());
+
+        if (flags & SKINNING)
+        {
+            flags &= ~(DUAL_TEXTURE | NORMAL_MAPS);
+        }
+        if (flags & DUAL_TEXTURE)
+        {
+            flags &= ~NORMAL_MAPS;
+        }
+
+        materialFlags[vbIdx] = flags;
+    }
+
+    for (UINT meshIndex = 0; meshIndex < header->NumMeshes; ++meshIndex)
+    {
+        auto& mh = meshArray[meshIndex];
+        if (!mh.NumSubsets
+            || !mh.NumVertexBuffers
+            || mh.IndexBuffer >= header->NumIndexBuffers
+            || mh.VertexBuffers[0] >= header->NumVertexBuffers)
+            throw std::exception("Invalid mesh found");
+
+        if (dataSize < mh.SubsetOffset
+            || (dataSize < mh.SubsetOffset + mh.NumSubsets * sizeof(UINT)))
+            throw std::exception("End of file");
+
+        auto subsets = reinterpret_cast<const UINT*>(meshData + mh.SubsetOffset);
+        for (UINT subsetIndex = 0; subsetIndex < mh.NumSubsets; ++subsetIndex)
+        {
+            auto sIndex = subsets[subsetIndex];
+            if (sIndex >= header->NumTotalSubsets)
+                throw std::exception("Invalid mesh found");
+            auto& subset = subsetArray[sIndex];
+
+            if (subset.MaterialID >= header->NumMaterials)
+                throw std::exception("Invalid mesh found");
+
+            DXUT::SDKMESH_MATERIAL mt = materialArray[subset.MaterialID];
+            unsigned int flags = materialFlags[mh.VertexBuffers[0]];
+            EffectFactory::EffectInfo effInfo;
+            RtlZeroMemory(&effInfo, sizeof(effInfo));
+
+            wchar_t matName[DXUT::MAX_MATERIAL_NAME];
+            MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, mt.Name, -1, matName, DXUT::MAX_MATERIAL_NAME);
+
+            wchar_t diffuseName[DXUT::MAX_TEXTURE_NAME];
+            MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, mt.DiffuseTexture, -1, diffuseName, DXUT::MAX_TEXTURE_NAME);
+
+            wchar_t specularName[DXUT::MAX_TEXTURE_NAME];
+            MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, mt.SpecularTexture, -1, specularName, DXUT::MAX_TEXTURE_NAME);
+
+            wchar_t normalName[DXUT::MAX_TEXTURE_NAME];
+            MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, mt.NormalTexture, -1, normalName, DXUT::MAX_TEXTURE_NAME);
+
+            effInfo.name = matName;
+            effInfo.perVertexColor = (flags & PER_VERTEX_COLOR) != 0;
+            effInfo.enableSkinning = (flags & SKINNING) != 0;
+            effInfo.enableDualTexture = (flags & DUAL_TEXTURE) != 0;
+            effInfo.enableNormalMaps = (flags & NORMAL_MAPS) != 0;
+            effInfo.biasedVertexNormals = (flags & BIASED_VERTEX_NORMALS) != 0;
+            if (mt.Power)
+            {
+                effInfo.specularPower = mt.Power;
+                effInfo.specularColor = XMFLOAT3(mt.Specular.x, mt.Specular.y, mt.Specular.z);
+            }
+            if (mt.Diffuse.w != 1.f && mt.Diffuse.w != 0.f)
+            {
+                effInfo.alpha = mt.Diffuse.w;
+            }
+            else
+            {
+                effInfo.alpha = 1.f;
+            }
+            effInfo.ambientColor = XMFLOAT3(mt.Ambient.x, mt.Ambient.y, mt.Ambient.z);
+            effInfo.diffuseColor = XMFLOAT3(mt.Diffuse.x, mt.Diffuse.y, mt.Diffuse.z);
+            effInfo.emissiveColor = XMFLOAT3(mt.Emissive.x, mt.Emissive.y, mt.Emissive.z);
+            effInfo.diffuseTexture = diffuseName;
+            effInfo.specularTexture = specularName;
+            effInfo.normalTexture = normalName;
+
+            // Override info
+            if(pInfoIn->textureMem.diffuseTexName && pInfoIn->textureMem.pDiffuseTex && pInfoIn->textureMem.diffuseTexSize)
+            {
+                effInfo.textureMem.diffuseTexName = pInfoIn->textureMem.diffuseTexName;
+                effInfo.textureMem.pDiffuseTex = pInfoIn->textureMem.pDiffuseTex;
+                effInfo.textureMem.diffuseTexSize = pInfoIn->textureMem.diffuseTexSize;
+            }
+
+            if (pInfoIn->textureMem.specularTexName && pInfoIn->textureMem.pSpecularTex && pInfoIn->textureMem.specularTexSize)
+            {
+                effInfo.textureMem.specularTexName = pInfoIn->textureMem.specularTexName;
+                effInfo.textureMem.pSpecularTex = pInfoIn->textureMem.pSpecularTex;
+                effInfo.textureMem.specularTexSize = pInfoIn->textureMem.specularTexSize;
+            }
+
+            if (pInfoIn->textureMem.normalTexName && pInfoIn->textureMem.pSpecularTex && pInfoIn->textureMem.specularTexSize)
+            {
+                effInfo.textureMem.normalTexName = pInfoIn->textureMem.normalTexName;
+                effInfo.textureMem.pSpecularTex = pInfoIn->textureMem.pSpecularTex;
+                effInfo.textureMem.specularTexSize = pInfoIn->textureMem.specularTexSize;
+            }
+
+            auto effect = fxFactory.CreateEffect(effInfo, nullptr);
+
+        }
+    }
+}
+
+
+//--------------------------------------------------------------------------------------
+_Use_decl_annotations_
 std::unique_ptr<Model> DirectX::Model::CreateFromSDKMESH( ID3D11Device* d3dDevice, const wchar_t* szFileName, IEffectFactory& fxFactory, bool ccw, bool pmalpha )
 {
     size_t dataSize = 0;

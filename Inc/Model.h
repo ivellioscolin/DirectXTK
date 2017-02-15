@@ -130,6 +130,8 @@ namespace DirectX
         // Loads a model from a DirectX SDK .SDKMESH file
         static std::unique_ptr<Model> __cdecl CreateFromSDKMESH( _In_ ID3D11Device* d3dDevice, _In_reads_bytes_(dataSize) const uint8_t* meshData, _In_ size_t dataSize,
                                                                  _In_ IEffectFactory& fxFactory, bool ccw = false, bool pmalpha = false );
+        static void __cdecl CreateEffectFromSDKMESHWithEffectInfo(_In_reads_bytes_(dataSize) const uint8_t* meshData, _In_ size_t dataSize,
+                                                                                         _In_ PVOID pEffInfoIn, _In_ IEffectFactory& fxFactory);
         static std::unique_ptr<Model> __cdecl CreateFromSDKMESH( _In_ ID3D11Device* d3dDevice, _In_z_ const wchar_t* szFileName,
                                                                  _In_ IEffectFactory& fxFactory, bool ccw = false, bool pmalpha = false );
 

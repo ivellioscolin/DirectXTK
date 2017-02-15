@@ -595,6 +595,18 @@ namespace DirectX
             const wchar_t*      diffuseTexture;
             const wchar_t*      specularTexture;
             const wchar_t*      normalTexture;
+            struct _textureMem
+            {
+                const wchar_t* diffuseTexName;
+                PVOID pDiffuseTex;
+                size_t diffuseTexSize;
+                const wchar_t* specularTexName;
+                PVOID pSpecularTex;
+                size_t specularTexSize;
+                const wchar_t* normalTexName;
+                PVOID pNormalTex;
+                size_t normalTexSize;
+            }textureMem;
 
             EffectInfo() { memset( this, 0, sizeof(EffectInfo) ); };
         };
@@ -602,6 +614,7 @@ namespace DirectX
         virtual std::shared_ptr<IEffect> __cdecl CreateEffect( _In_ const EffectInfo& info, _In_opt_ ID3D11DeviceContext* deviceContext ) = 0;
 
         virtual void __cdecl CreateTexture( _In_z_ const wchar_t* name, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView ) = 0;
+        virtual void __cdecl CreateTextureFromMemory( _In_z_ const wchar_t* name, _In_z_ const PVOID pTexmem, _In_z_ size_t texSize, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView) = 0;
     };
 
 
@@ -621,6 +634,7 @@ namespace DirectX
         // IEffectFactory methods.
         virtual std::shared_ptr<IEffect> __cdecl CreateEffect( _In_ const EffectInfo& info, _In_opt_ ID3D11DeviceContext* deviceContext ) override;
         virtual void __cdecl CreateTexture( _In_z_ const wchar_t* name, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView ) override;
+        virtual void __cdecl CreateTextureFromMemory( _In_z_ const wchar_t* name, _In_z_ const PVOID pTexmem, _In_z_ size_t texSize, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView) override;
 
         // Settings.
         void __cdecl ReleaseCache();

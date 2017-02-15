@@ -39,6 +39,7 @@ public:
 
     std::shared_ptr<IEffect> CreateEffect( _In_ IEffectFactory* factory, _In_ const IEffectFactory::EffectInfo& info, _In_opt_ ID3D11DeviceContext* deviceContext );
     void CreateTexture( _In_z_ const wchar_t* texture, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView );
+    void CreateTextureFromMemory( _In_z_ const wchar_t* texture, _In_z_ const PVOID pTexmem, _In_z_ size_t texSize, _In_opt_ ID3D11DeviceContext* deviceContext, _Outptr_ ID3D11ShaderResourceView** textureView);
 
     void ReleaseCache();
     void SetSharing( bool enabled ) { mSharing = enabled; }
@@ -124,6 +125,19 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(IEffectFactory* facto
 
             effect->SetTexture(srv.Get());
         }
+        else if (info.textureMem.diffuseTexName && info.textureMem.pDiffuseTex && info.textureMem.diffuseTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.diffuseTexName,
+                info.textureMem.pDiffuseTex, 
+                info.textureMem.diffuseTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
+
+            effect->SetTexture(srv.Get());
+        }
 
         if (info.biasedVertexNormals)
         {
@@ -172,12 +186,38 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(IEffectFactory* facto
 
             effect->SetTexture(srv.Get());
         }
+        else if (info.textureMem.diffuseTexName && info.textureMem.pDiffuseTex && info.textureMem.diffuseTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.diffuseTexName,
+                info.textureMem.pDiffuseTex, 
+                info.textureMem.diffuseTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
+
+            effect->SetTexture(srv.Get());
+        }
 
         if (info.specularTexture && *info.specularTexture)
         {
             ComPtr<ID3D11ShaderResourceView> srv;
 
             factory->CreateTexture(info.specularTexture, deviceContext, srv.GetAddressOf());
+
+            effect->SetTexture2(srv.Get());
+        }
+        else if (info.textureMem.specularTexName && info.textureMem.pSpecularTex && info.textureMem.specularTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.specularTexName,
+                info.textureMem.pSpecularTex, 
+                info.textureMem.specularTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
 
             effect->SetTexture2(srv.Get());
         }
@@ -243,6 +283,19 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(IEffectFactory* facto
 
             effect->SetTexture(srv.Get());
         }
+        else if (info.textureMem.diffuseTexName && info.textureMem.pDiffuseTex && info.textureMem.diffuseTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.diffuseTexName,
+                info.textureMem.pDiffuseTex, 
+                info.textureMem.diffuseTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
+
+            effect->SetTexture(srv.Get());
+        }
 
         if (info.specularTexture && *info.specularTexture)
         {
@@ -252,12 +305,38 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(IEffectFactory* facto
 
             effect->SetSpecularTexture(srv.Get());
         }
+        else if (info.textureMem.specularTexName && info.textureMem.pSpecularTex && info.textureMem.specularTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.specularTexName,
+                info.textureMem.pSpecularTex, 
+                info.textureMem.specularTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
+
+            effect->SetSpecularTexture(srv.Get());
+        }
 
         if (info.normalTexture && *info.normalTexture)
         {
             ComPtr<ID3D11ShaderResourceView> srv;
 
             factory->CreateTexture(info.normalTexture, deviceContext, srv.GetAddressOf());
+
+            effect->SetNormalTexture(srv.Get());
+        }
+        else if (info.textureMem.normalTexName && info.textureMem.pNormalTex && info.textureMem.normalTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.normalTexName,
+                info.textureMem.pNormalTex, 
+                info.textureMem.normalTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
 
             effect->SetNormalTexture(srv.Get());
         }
@@ -326,6 +405,20 @@ std::shared_ptr<IEffect> EffectFactory::Impl::CreateEffect(IEffectFactory* facto
             ComPtr<ID3D11ShaderResourceView> srv;
 
             factory->CreateTexture(info.diffuseTexture, deviceContext, srv.GetAddressOf());
+
+            effect->SetTexture(srv.Get());
+            effect->SetTextureEnabled(true);
+        }
+        else if (info.textureMem.diffuseTexName && info.textureMem.pDiffuseTex && info.textureMem.diffuseTexSize)
+        {
+            ComPtr<ID3D11ShaderResourceView> srv;
+
+            factory->CreateTextureFromMemory(
+                info.textureMem.diffuseTexName,
+                info.textureMem.pDiffuseTex, 
+                info.textureMem.diffuseTexSize,
+                deviceContext, 
+                srv.GetAddressOf());
 
             effect->SetTexture(srv.Get());
             effect->SetTextureEnabled(true);
@@ -433,6 +526,96 @@ void EffectFactory::Impl::CreateTexture(const wchar_t* name, ID3D11DeviceContext
     }
 }
 
+_Use_decl_annotations_
+void EffectFactory::Impl::CreateTextureFromMemory(const wchar_t* name, const PVOID pTexmem, size_t texSize, ID3D11DeviceContext* deviceContext, ID3D11ShaderResourceView** textureView)
+{
+    if (!name || !pTexmem || !texSize || !textureView)
+        throw std::exception("invalid arguments");
+
+#if defined(_XBOX_ONE) && defined(_TITLE)
+    UNREFERENCED_PARAMETER(deviceContext);
+#endif
+
+    auto it = mTextureCache.find(name);
+
+    if (mSharing && it != mTextureCache.end())
+    {
+        ID3D11ShaderResourceView* srv = it->second.Get();
+        srv->AddRef();
+        *textureView = srv;
+    }
+    else
+    {
+        //wchar_t fullName[MAX_PATH] = {};
+        //wcscpy_s(fullName, mPath);
+        //wcscat_s(fullName, name);
+
+        //WIN32_FILE_ATTRIBUTE_DATA fileAttr = {};
+        //if (!GetFileAttributesExW(fullName, GetFileExInfoStandard, &fileAttr))
+        //{
+        //    // Try Current Working Directory (CWD)
+        //    wcscpy_s(fullName, name);
+        //    if (!GetFileAttributesExW(fullName, GetFileExInfoStandard, &fileAttr))
+        //    {
+        //        DebugTrace("EffectFactory could not find texture file '%ls'\n", name);
+        //        throw std::exception("CreateTexture");
+        //    }
+        //}
+
+        wchar_t ext[_MAX_EXT];
+        _wsplitpath_s(name, nullptr, 0, nullptr, 0, nullptr, 0, ext, _MAX_EXT);
+
+        if (_wcsicmp(ext, L".dds") == 0)
+        {
+            HRESULT hr = CreateDDSTextureFromMemoryEx(
+                device.Get(),
+                (const uint8_t*)pTexmem, texSize, 0,
+                D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
+                mForceSRGB, nullptr, textureView);
+            if (FAILED(hr))
+            {
+                DebugTrace("CreateDDSTextureFromMemoryEx failed (%08X) for '%ls'\n", hr, name);
+                throw std::exception("CreateDDSTextureFromMemoryEx");
+            }
+        }
+#if !defined(_XBOX_ONE) || !defined(_TITLE)
+        else if (deviceContext)
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            HRESULT hr = CreateWICTextureFromMemoryEx(
+                device.Get(), deviceContext,
+                (const uint8_t*)pTexmem, texSize, 0,
+                D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
+                mForceSRGB ? WIC_LOADER_FORCE_SRGB : WIC_LOADER_DEFAULT, nullptr, textureView);
+            if (FAILED(hr))
+            {
+                DebugTrace("CreateWICTextureFromMemoryEx failed (%08X) for '%ls'\n", hr, name);
+                throw std::exception("CreateWICTextureFromMemoryEx");
+            }
+        }
+#endif
+        else
+        {
+            HRESULT hr = CreateWICTextureFromMemoryEx(
+                device.Get(), 
+                (const uint8_t*)pTexmem, texSize, 0, 
+                D3D11_USAGE_DEFAULT, D3D11_BIND_SHADER_RESOURCE, 0, 0,
+                mForceSRGB ? WIC_LOADER_FORCE_SRGB : WIC_LOADER_DEFAULT, nullptr, textureView);
+            if (FAILED(hr))
+            {
+                DebugTrace("CreateWICTextureFromMemoryEx failed (%08X) for '%ls'\n", hr, name);
+                throw std::exception("CreateWICTextureFromMemoryEx");
+            }
+        }
+
+        if (mSharing && *name && it == mTextureCache.end())
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            mTextureCache.insert(TextureCache::value_type(name, *textureView));
+        }
+    }
+}
+
 void EffectFactory::Impl::ReleaseCache()
 {
     std::lock_guard<std::mutex> lock(mutex);
@@ -480,6 +663,12 @@ _Use_decl_annotations_
 void EffectFactory::CreateTexture(const wchar_t* name, ID3D11DeviceContext* deviceContext, ID3D11ShaderResourceView** textureView)
 {
     return pImpl->CreateTexture(name, deviceContext, textureView);
+}
+
+_Use_decl_annotations_
+void EffectFactory::CreateTextureFromMemory(const wchar_t* name, const PVOID pTexmem, size_t texSize, ID3D11DeviceContext* deviceContext, ID3D11ShaderResourceView** textureView)
+{
+    return pImpl->CreateTextureFromMemory(name, pTexmem, texSize, deviceContext, textureView);
 }
 
 void EffectFactory::ReleaseCache()
